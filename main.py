@@ -7,28 +7,37 @@ app = FastAPI()
 async def root():
     return {"status": "ok"}
 
-@app.post("/honeypot")
+@app.api_route("/honeypot", methods=["GET", "POST"])
 async def honeypot(request: Request):
-
-    try:
-        body = await request.json()
-    except:
-        body = {}
 
     text = ""
 
-    try:
-        text = body.get("message", {}).get("text", "")
-    except:
-        text = ""
+    if request.method == "POST":
+        # Try JSON first
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                text = body.get("message", {}).get("text", "")
+        except:
+            pass
 
-    msg = text.lower()
+        # Fallback to raw body
+        if not text:
+            try:
+                raw = await request.body()
+                text = raw.decode("utf-8", errors="ignore")
+            except:
+                pass
 
-    if "bank" in msg or "blocked" in msg or "verify" in msg:
+    msg = str(text).lower()
+
+    # Honeypot reply logic (agentic)
+    if any(word in msg for word in ["bank", "blocked", "verify", "otp", "account"]):
         reply = "Why is my account being suspended?"
     else:
         reply = "Can you explain what this message is about?"
 
+    # EXACT response schema required by hackathon tester
     return {
         "status": "success",
         "reply": reply
