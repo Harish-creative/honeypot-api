@@ -1,12 +1,8 @@
-from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, Header, HTTPException, Request
 import re, random, os
 
 app = FastAPI()
 API_KEY = "test_api_key"
-
-class HoneypotRequest(BaseModel):
-    message: str
 
 
 def analyze_message(message: str):
@@ -41,7 +37,7 @@ def extract_entities(message: str):
     return {
         "phone_numbers": re.findall(r"\b\d{10}\b", message),
         "urls": re.findall(r"https?://\S+", message),
-        "amounts": re.findall(r"\₹?\$?\d+", message)
+        "amounts": re.findall(r"\₹?\$?\d+", message),
     }
 
 
@@ -49,7 +45,7 @@ def generate_reply(scam_type):
     phishing = [
         "Can you explain what this is about?",
         "Which account are you referring to?",
-        "I didn’t understand, can you clarify?"
+        "I didn’t understand, can you clarify?",
     ]
     safe = ["Okay, noted.", "Thanks for the information."]
 
@@ -62,21 +58,35 @@ def home():
 
 
 @app.post("/honeypot")
-def honeypot_endpoint(
-    data: HoneypotRequest,
+async def honeypot_endpoint(
+    request: Request,
     x_api_key: str = Header(None)
 ):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    scam_type, risk_score, signals = analyze_message(data.message)
+    body = await request.json()
+
+    # 🔑 Accept multiple possible keys
+    message = (
+        body.get("message")
+        or body.get("text")
+        or body.get("content")
+    )
+
+    if not message or not isinstance(message, str):
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    scam_type, risk_score, signals = analyze_message(message)
 
     return {
+        "status": "success",
         "scam_type": scam_type,
         "risk_score": risk_score,
         "signals": signals,
-        "extracted_entities": extract_entities(data.message),
-        "honeypot_reply": generate_reply(scam_type)
+        "extracted_entities": extract_entities(message),
+        "honeypot_reply": generate_reply(scam_type),
+        "confidence": "high" if risk_score > 0.5 else "medium",
     }
 
 
