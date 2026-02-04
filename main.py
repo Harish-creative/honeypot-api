@@ -3,41 +3,44 @@ import os
 
 app = FastAPI()
 
-@app.get("/")
-async def root():
-    return {"status": "ok"}
+@app.api_route("/", methods=["GET", "POST", "OPTIONS"])
+async def root(request: Request):
+    return {"status": "success", "reply": "ok"}
 
-@app.api_route("/honeypot", methods=["GET", "POST"])
+@app.api_route("/honeypot", methods=["GET", "POST", "OPTIONS"])
 async def honeypot(request: Request):
+
+    # Handle OPTIONS (preflight)
+    if request.method == "OPTIONS":
+        return {"status": "success", "reply": "ok"}
 
     text = ""
 
-    if request.method == "POST":
-        # Try JSON first
+    # Try JSON safely
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            text = body.get("message", {}).get("text", "")
+    except:
+        pass
+
+    # Try raw body
+    if not text:
         try:
-            body = await request.json()
-            if isinstance(body, dict):
-                text = body.get("message", {}).get("text", "")
+            raw = await request.body()
+            text = raw.decode("utf-8", errors="ignore")
         except:
             pass
 
-        # Fallback to raw body
-        if not text:
-            try:
-                raw = await request.body()
-                text = raw.decode("utf-8", errors="ignore")
-            except:
-                pass
-
     msg = str(text).lower()
 
-    # Honeypot reply logic (agentic)
-    if any(word in msg for word in ["bank", "blocked", "verify", "otp", "account"]):
+    # Honeypot logic
+    if any(k in msg for k in ["bank", "blocked", "verify", "otp", "account", "urgent"]):
         reply = "Why is my account being suspended?"
     else:
         reply = "Can you explain what this message is about?"
 
-    # EXACT response schema required by hackathon tester
+    # EXACT schema expected
     return {
         "status": "success",
         "reply": reply
