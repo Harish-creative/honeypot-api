@@ -1,30 +1,42 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header, HTTPException
 import os
 
 app = FastAPI()
 
-@app.api_route("/", methods=["GET", "POST", "OPTIONS"])
-async def root(request: Request):
+API_KEY = "test_api_key"
+
+# Root health check
+@app.api_route("/", methods=["GET", "OPTIONS"])
+async def root():
     return {"status": "success", "reply": "ok"}
 
+# Honeypot endpoint
 @app.api_route("/honeypot", methods=["GET", "POST", "OPTIONS"])
-async def honeypot(request: Request):
+async def honeypot(request: Request, x_api_key: str = Header(None)):
 
-    # Handle OPTIONS (preflight)
+    # OPTIONS preflight
     if request.method == "OPTIONS":
         return {"status": "success", "reply": "ok"}
 
+    # API Key validation
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     text = ""
 
-    # Try JSON safely
+    # Try JSON body
     try:
         body = await request.json()
         if isinstance(body, dict):
-            text = body.get("message", {}).get("text", "")
+            # Hackathon nested format
+            if "message" in body and isinstance(body["message"], dict):
+                text = body["message"].get("text", "")
+            else:
+                text = body.get("text", "")
     except:
         pass
 
-    # Try raw body
+    # Fallback raw body
     if not text:
         try:
             raw = await request.body()
@@ -35,12 +47,14 @@ async def honeypot(request: Request):
     msg = str(text).lower()
 
     # Honeypot logic
-    if any(k in msg for k in ["bank", "blocked", "verify", "otp", "account", "urgent"]):
+    scam_words = ["bank", "blocked", "verify", "otp", "account", "urgent", "suspended"]
+
+    if any(word in msg for word in scam_words):
         reply = "Why is my account being suspended?"
     else:
         reply = "Can you explain what this message is about?"
 
-    # EXACT schema expected
+    # EXACT response schema expected by tester
     return {
         "status": "success",
         "reply": reply
