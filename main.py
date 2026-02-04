@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 import os
-import re
 
 app = FastAPI()
 
@@ -8,46 +7,31 @@ app = FastAPI()
 async def root():
     return {"status": "ok"}
 
-@app.api_route("/honeypot", methods=["GET", "POST"])
+@app.post("/honeypot")
 async def honeypot(request: Request):
 
-    message = ""
+    try:
+        body = await request.json()
+    except:
+        body = {}
 
-    if request.method == "POST":
-        try:
-            data = await request.json()
-            if isinstance(data, dict):
-                message = str(data.get("message", ""))
-        except:
-            try:
-                raw = await request.body()
-                message = raw.decode("utf-8", errors="ignore")
-            except:
-                message = ""
+    text = ""
 
-    msg = message.lower()
+    try:
+        text = body.get("message", {}).get("text", "")
+    except:
+        text = ""
 
-    scam_type = "phishing" if "otp" in msg else "legitimate"
-    risk_score = 0.7 if scam_type == "phishing" else 0.2
-    signals = ["otp_request"] if scam_type == "phishing" else []
+    msg = text.lower()
 
-    phones = re.findall(r"\b\d{10}\b", message)
-    urls = re.findall(r"https?://\S+", message)
-    amounts = re.findall(r"\₹?\$?\d+", message)
-
-    extracted_entities = {
-        "phone_numbers": phones,
-        "urls": urls,
-        "amounts": amounts
-    }
+    if "bank" in msg or "blocked" in msg or "verify" in msg:
+        reply = "Why is my account being suspended?"
+    else:
+        reply = "Can you explain what this message is about?"
 
     return {
         "status": "success",
-        "scam_type": scam_type,
-        "risk_score": risk_score,
-        "signals": signals,
-        "extracted_entities": extracted_entities,
-        "honeypot_reply": "Please clarify your request."
+        "reply": reply
     }
 
 if __name__ == "__main__":
