@@ -3,52 +3,42 @@ import os
 
 app = FastAPI()
 
-
 @app.get("/")
-def home():
-    return {"status": "Honeypot API running"}
-
+async def root():
+    return {"status": "ok"}
 
 @app.api_route("/honeypot", methods=["GET", "POST"])
 async def honeypot(request: Request):
+
     message = ""
 
     if request.method == "POST":
-        # 1️⃣ Try JSON
+        # Try JSON safely
         try:
-            body = await request.json()
-            if isinstance(body, dict):
-                message = body.get("message", "")
+            data = await request.json()
+            if isinstance(data, dict):
+                message = str(data.get("message", ""))
         except:
             pass
 
-        # 2️⃣ Try form data
-        if not message:
-            try:
-                form = await request.form()
-                message = form.get("message", "")
-            except:
-                pass
-
-        # 3️⃣ Try raw text
+        # Try raw body (tester sometimes sends plain text)
         if not message:
             try:
                 raw = await request.body()
-                message = raw.decode("utf-8")
+                message = raw.decode("utf-8", errors="ignore")
             except:
                 pass
 
-    scam_type = "phishing" if "otp" in message.lower() else "legitimate"
+    scam = "phishing" if "otp" in message.lower() else "legitimate"
 
     return {
         "status": "success",
-        "scam_type": scam_type,
-        "risk_score": 0.7 if scam_type == "phishing" else 0.2,
-        "signals": ["otp_request"] if scam_type == "phishing" else [],
-        "extracted_message": message,
-        "honeypot_reply": "Please clarify your request."
+        "scam_type": scam,
+        "risk_score": 0.7 if scam == "phishing" else 0.2,
+        "signals": ["otp_request"] if scam == "phishing" else [],
+        "honeypot_reply": "Please clarify your request.",
+        "received_message": message
     }
-
 
 if __name__ == "__main__":
     import uvicorn
